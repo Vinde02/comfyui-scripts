@@ -116,11 +116,13 @@ download_hf_repo "${REFINER_REPO}" "${DIFFUSERS_DIR}/sdxl-refiner-1.0" || {
   exit 1
 }
 
-# VAE fix
-msg "Scarico VAE fixato per SDXL..."
-download_hf_repo "${SDXL_VAE_REPO}" "${VAE_DIR}/sdxl-vae-fp16-fix" || {
-  msg "ATTENZIONE: VAE non scaricato. Puoi comunque usare il VAE incluso nel checkpoint, ma la qualità potrebbe risentirne."
-}
+# VAE fix - direct download (no gating)
+msg "Scarico VAE fixato per SDXL (direct link)..."
+mkdir -p "${VAE_DIR}/sdxl-vae-fp16-fix"
+wget -O "${VAE_DIR}/sdxl-vae-fp16-fix/sdxl.vae.safetensors" \
+  "https://huggingface.co/madebyollin/sdxl-vae-fp16-fix/resolve/main/sdxl.vae.safetensors?download=true" \
+  || msg "ATTENZIONE: VAE non scaricato. Puoi usare il VAE incluso nel checkpoint, ma la qualità potrebbe risentirne."
+
 
 # ControlNet XL – Canny
 msg "Scarico ControlNet XL (Canny)..."
@@ -140,11 +142,25 @@ try_first_available CTRL_TILE_CANDIDATES "${CTRL_DIR}/sdxl-tile" || {
   msg "ATTENZIONE: impossibile scaricare ControlNet Tile XL. Modifica i candidati nello script con un repo esatto."
 }
 
-# IP-Adapter XL
-msg "Scarico IP-Adapter XL..."
-download_hf_repo "${IPADAPTER_REPO}" "${IPADAPTER_DIR}/IP-Adapter" || {
-  msg "ATTENZIONE: impossibile scaricare IP-Adapter XL. Puoi proseguire senza, ma perderai coerenza di stile/palette."
-}
+# --- IP-Adapter SDXL (weights + image encoder) ---
+msg "Scarico IP-Adapter SDXL (weights)..."
+mkdir -p "${IPADAPTER_DIR}/IP-Adapter/sdxl_models"
+# Variante consigliata (patch-based, più fedele alla reference)
+huggingface-cli download "h94/IP-Adapter" "sdxl_models/ip-adapter-plus_sdxl_vit-h.bin" \
+  --local-dir "${IPADAPTER_DIR}/IP-Adapter" --local-dir-use-symlinks False \
+  || msg "ATTENZIONE: non riesco a scaricare ip-adapter-plus_sdxl_vit-h.bin"
+
+# Alternativa global (opzionale)
+huggingface-cli download "h94/IP-Adapter" "sdxl_models/ip-adapter_sdxl.bin" \
+  --local-dir "${IPADAPTER_DIR}/IP-Adapter" --local-dir-use-symlinks False || true
+
+msg "Scarico Image Encoder per SDXL (LAION CLIP ViT-bigG-14)..."
+mkdir -p "${IPADAPTER_DIR}/IP-Adapter/sdxl_models/image_encoder"
+huggingface-cli download "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k" \
+  --local-dir "${IPADAPTER_DIR}/IP-Adapter/sdxl_models/image_encoder" \
+  --local-dir-use-symlinks False \
+  || msg "ATTENZIONE: encoder CLIP bigG non scaricato (puoi usare ViT-H oppure indicare il path manualmente nel nodo)."
+
 
 # Upscalers ESRGAN (best effort)
 msg "Provo a recuperare upscaler ESRGAN comuni (UltraSharp/Remacri) – best effort..."

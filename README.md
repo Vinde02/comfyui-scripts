@@ -1,4 +1,4 @@
-# 🏗️ SDXL Power Toolkit per ComfyUI
+# 🏗️ SDXL Power Toolkit per ComfyUI – Workflow fotorealistico per arredamento e cataloghi
 
 Toolkit completo per configurare **ComfyUI** con un workflow SDXL ad altissima qualità, pensato per generare **sfondi fotorealistici per arredamento** (cataloghi, ambienti interni, showroom) su RunPod o su qualsiasi macchina con GPU.
 

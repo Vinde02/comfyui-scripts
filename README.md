@@ -25,23 +25,6 @@ Questo repository contiene **`setup_runpod_comfyui.sh`**, uno script **automatiz
 
 ---
 
-## 📥 Installazione
-
-Clona la repo dentro la tua area di lavoro RunPod (tipicamente `/workspace`):
-
-```
-cd /workspace
-git clone https://github.com/Vinde02/comfyui-scripts.git
-cd comfyui-scripts
-```
-## ▶️ Avvio script
-Assicurati di avere la cartella ComfyUI dentro /workspace.
-
-```
-chmod +x setup_runpod_comfyui.sh
-./setup_runpod_comfyui.sh
-```
-
 ## 🔑 Hugging Face Token (Opzionale)
 I modelli inclusi sono pubblici → non serve token.
 Se però vuoi installare modelli da repo privati o con licenza accettata, esporta il tuo HF_TOKEN:
@@ -53,20 +36,48 @@ export HF_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 > 📌 Senza token, lo script funziona comunque per i modelli già inclusi.
 
-## 📋 Script rapidi
+## 📋 Script di utilizzo su runpod
 Installazione completa (con token opzionale)
+apri nano con 
+```
+nano start_setup.sh
+```
+incolla il  seguente script e poi premi ctrl+o, poi invio e chiudi il nano con ctrl+x
+```
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Configura qui il tuo repo e lo script
+REPO_URL="https://github.com/Vinde02/comfyui-scripts.git"
+REPO_DIR="comfyui-scripts"
+SCRIPT_NAME="setup_runpod_comfyui.sh"
+
+# 1. Clona o aggiorna repo
+if [[ -d "$REPO_DIR" ]]; then
+  echo "[INFO] Repo già presente, aggiorno..."
+  git -C "$REPO_DIR" pull
+else
+  echo "[INFO] Clono repo..."
+  git clone "$REPO_URL" "$REPO_DIR"
+fi
+
+# 2. Rendi eseguibile lo script
+chmod +x "$REPO_DIR/$SCRIPT_NAME"
+
+# 3. (Opzionale) Token Hugging Face non interattivo
+# Esporta il token PRIMA di lanciare lo script
+# export HF_TOKEN="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# 4. Lancia lo script
+echo "[INFO] Avvio installazione..."
+"./$REPO_DIR/$SCRIPT_NAME"
 
 ```
-cd /workspace/comfyui-scripts
-chmod +x setup_runpod_comfyui.sh
-export HF_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx   # ← opzionale
-./setup_runpod_comfyui.sh
-```
-Aggiornare la repo
+poi usa il seguente comando
 
 ```
-cd /workspace/comfyui-scripts
-git pull
+chmod +x start_setup.sh
+./start_setup.sh
 ```
 
 ## ✅ Modelli inclusi nello script

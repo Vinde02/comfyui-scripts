@@ -12,7 +12,7 @@ trap 'err "Linea $LINENO (exit $?)"' ERR
 : "${MIN_FREE_GB:=10}"
 : "${MAX_RETRIES:=5}"
 : "${DL_TIMEOUT:=0}"
-: "${FORCE_REDOWNLOAD:=1}"
+: "${FORCE_REDOWNLOAD:=0}"
 
 # Abilita/Disabilita “pacchetti”
 : "${ENABLE_JXL_INP:=1}"

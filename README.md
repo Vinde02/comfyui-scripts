@@ -29,38 +29,43 @@ Questo repository contiene **`setup_runpod_comfyui.sh`**, uno script **automatiz
 
 Clona la repo dentro la tua area di lavoro RunPod (tipicamente `/workspace`):
 
-```bash
+```
 cd /workspace
 git clone https://github.com/Vinde02/comfyui-scripts.git
 cd comfyui-scripts
+```
 ▶️ Avvio script
 Assicurati di avere la cartella ComfyUI dentro /workspace.
 
-```bash
+```
 chmod +x setup_runpod_comfyui.sh
 ./setup_runpod_comfyui.sh
+```
 🔑 Hugging Face Token (Opzionale)
 I modelli inclusi sono pubblici → non serve token.
 Se però vuoi installare modelli da repo privati o con licenza accettata, esporta il tuo HF_TOKEN:
 
-```bash
+```
 export HF_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ./setup_runpod_comfyui.sh
+```
 📌 Senza token, lo script funziona comunque per i modelli già inclusi.
 
 📋 Script rapidi
 Installazione completa (con token opzionale)
 
-```bash
+```
 cd /workspace/comfyui-scripts
 chmod +x setup_runpod_comfyui.sh
 export HF_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx   # ← opzionale
 ./setup_runpod_comfyui.sh
+```
 Aggiornare la repo
 
-```bash
+```
 cd /workspace/comfyui-scripts
 git pull
+```
 ✅ Modelli inclusi nello script
 Juggernaut XL Inpainting (Civitai)
 

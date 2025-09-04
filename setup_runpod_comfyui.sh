@@ -20,7 +20,7 @@ MIN_FREE_GB="${MIN_FREE_GB:-10}"
 log "ComfyUI: $COMFY"
 
 # ===== Cartelle modelli =====
-install -d -m 775 "$COMFY/models/"{checkpoints,vae,diffusers,controlnet,ipadapter,loras,upscale_models}
+mkdir -p "$COMFY/models/"{checkpoints,vae,diffusers,controlnet,ipadapter,loras,upscale_models}
 
 # ===== Dipendenze (non-interattive) =====
 if command -v apt-get >/dev/null 2>&1; then

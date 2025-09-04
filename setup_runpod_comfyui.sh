@@ -12,12 +12,27 @@ err(){ echo -e "${RED}[ERROR]${NC} $*" >&2; }
 trap 'err "Fallito alla linea $LINENO"; exit 1' ERR
 
 # ===== Config =====
-COMFY="$(realpath -m ./ComfyUI)"     # cartella di lavoro OBBLIGATORIA
-[[ -d "$COMFY" ]] || { err "Cartella '$COMFY' non trovata. Crea/posiziona qui ComfyUI e rilancia."; exit 5; }
+# Puoi forzare il path così: COMFY=/workspace/ComfyUI ./setup_runpod_comfyui.sh
+# Se non è impostato, prova a rilevarlo automaticamente.
+if [[ -n "${COMFY:-}" ]]; then
+  COMFY="$(realpath -m "$COMFY")"
+else
+  # Ordine di ricerca tipico su RunPod + repo vicine
+  for cand in \
+    "/workspace/ComfyUI" \
+    "$PWD/../ComfyUI" \
+    "$HOME/ComfyUI" \
+    "$PWD/ComfyUI"
+  do
+    [[ -d "$cand" ]] && COMFY="$(realpath -m "$cand")" && break
+  done
+fi
+
+[[ -z "${COMFY:-}" || ! -d "$COMFY" ]] && err "Cartella ComfyUI non trovata. Imposta COMFY=/percorso/ComfyUI oppure crea la cartella." && exit 5
+log "ComfyUI: $COMFY"
+
 ASSUME_YES="${ASSUME_YES:-1}"
 MIN_FREE_GB="${MIN_FREE_GB:-10}"
-
-log "ComfyUI: $COMFY"
 
 # ===== Cartelle modelli =====
 mkdir -p "$COMFY/models/"{checkpoints,vae,diffusers,controlnet,ipadapter,loras,upscale_models}

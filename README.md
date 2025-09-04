@@ -1,165 +1,74 @@
-# 🏗️ SDXL Power Toolkit per ComfyUI – Workflow fotorealistico per arredamento e cataloghi
+# 🚀 Setup RunPod ComfyUI Scripts
 
-Toolkit completo per configurare **ComfyUI** con un workflow SDXL ad altissima qualità, pensato per generare **sfondi fotorealistici per arredamento** (cataloghi, ambienti interni, showroom) su RunPod o su qualsiasi macchina con GPU.
+Questo repository contiene **`setup_runpod_comfyui.sh`**, uno script automatico pensato per installare e configurare **modelli essenziali per ComfyUI** in ambiente **RunPod** (o qualsiasi container Linux).
 
-Lo script incluso installa in un colpo solo:
-- **JuggernautXL** – checkpoint fotorealistico ottimizzato per interni
-- **SDXL Refiner 1.0** – secondo pass per micro‑dettaglio e transizioni cromatiche
-- **VAE fixato** per massima fedeltà colore/texture
-- **ControlNet XL** (Depth, Canny, Tile) – per prospettiva, bordi e upscaling coerente
-- **IP‑Adapter XL** – per mantenere palette/stile da immagine di riferimento
-- **Upscaler ESRGAN** (UltraSharp, Remacri) – nitidezza extra senza perdere realismo
+## 🛠️ Cosa fa lo script
+- Crea automaticamente tutte le cartelle `models/` necessarie (`checkpoints`, `vae`, `controlnet`, `ipadapter`, `loras`, `upscale_models`).
+- Scarica i modelli principali (Juggernaut XL Inpainting, IP-Adapter, SDXL VAE, Upscaler 4x-UltraSharp).
+- Verifica l’integrità dei file `.safetensors`.
+- Gestisce download con retry, resume e supporto Hugging Face.
+- Non richiede input interattivi → perfetto per RunPod.
 
 ---
 
-## 🚀 Installazione rapida
+## 📥 Clonare la repo
 
 ```bash
-wget "https://raw.githubusercontent.com/emazeck/comfyui-scripts/refs/heads/main/setup_sdxl_env.sh" -O setup_sdxl_env.sh
-chmod +x setup_sdxl_env.sh
-./setup_sdxl_env.sh
-Licenze / accesso Hugging Face
-
-Se un download restituisce 403 Forbidden, apri la pagina del modello su Hugging Face e accetta la licenza.
-
-Puoi autenticarti in modo non interattivo esportando il token:
+cd /workspace
+git clone https://github.com/Vinde02/comfyui-scripts.git
+cd comfyui-scripts
+▶️ Avviare l’installazione
+Assicurati di avere la cartella ComfyUI in /workspace (o nella stessa directory da cui lanci).
 
 bash
-Copia
-export HF_TOKEN=il_tuo_token
-./setup_sdxl_env.sh
-🔧 Prerequisiti
-Lo script proverà a installare automaticamente: git, git-lfs, python3-pip, huggingface_hub, safetensors.
+Copia codice
+chmod +x setup_runpod_comfyui.sh
+./setup_runpod_comfyui.sh
+🔑 (Opzionale) Hugging Face Token
+Alcuni modelli pubblici non richiedono token.
+👉 Se invece vuoi scaricare modelli da repo privati o con licenza accettata, devi esportare il tuo HF_TOKEN.
 
-Se preferisci, puoi installarli tu prima di eseguire lo script.
-
-📍 Percorso di ComfyUI (variabile COMFY)
-Per default lo script usa: ~/ComfyUI.
-
-Se ComfyUI è altrove, prima di lanciare lo script imposta la variabile:
-
+Come aggiungere il token
 bash
-Copia
-export COMFY="/percorso/assoluto/alla/tuacomfy/ComfyUI"
-./setup_sdxl_env.sh
-Lo script creerà le cartelle necessarie se mancanti.
+Copia codice
+export HF_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+./setup_runpod_comfyui.sh
+📌 Nota: senza HF_TOKEN lo script funziona comunque per i modelli pubblici già inclusi.
 
-📦 Cosa installa e dove
+📋 Script veloci
+Installazione completa (con token se serve)
 bash
-Copia
-ComfyUI/
- └── models/
-     ├── checkpoints/       → JuggernautXL
-     ├── vae/               → sdxl-vae-fp16-fix
-     ├── diffusers/         → sdxl-refiner-1.0 (SDXL Refiner)
-     ├── controlnet/        → sdxl-canny, sdxl-depth, sdxl-tile
-     ├── ipadapter/         → IP-Adapter (repo completo)
-     ├── loras/             → (facoltativo, per i tuoi stili/brand)
-     └── upscale_models/    → 4x-UltraSharp.pth, 4x-Remacri.pth (se trovati)
-Nota upscaler: alcuni .pth community non sono sempre disponibili via HF API.
-Se 4x-UltraSharp.pth o 4x-Remacri.pth non vengono trovati automaticamente,
-scaricali manualmente e mettili in ComfyUI/models/upscale_models/.
-
-🧠 Modelli usati (indicativi)
-Checkpoint principale: RunDiffusion/Juggernaut-XL
-
-Refiner (diffusers): stabilityai/stable-diffusion-xl-refiner-1.0
-
-VAE: madebyollin/sdxl-vae-fp16-fix
-
-ControlNet XL (candidati auto‑detect nello script):
-
-Canny: es. diffusers/controlnet-canny-sdxl-1.0
-
-Depth: es. diffusers/controlnet-depth-sdxl-1.0
-
-Tile: es. diffusers/controlnet-tile-sdxl-1.0
-
-IP‑Adapter XL: h94/IP-Adapter
-
-ESRGAN: tentativo automatico di 4x-UltraSharp.pth e 4x-Remacri.pth
-
-Se un repo candidato non esistesse o richiedesse accesso, lo script mostra un avviso:
-puoi modificare gli ID direttamente in setup_sdxl_env.sh.
-
-🖼️ Workflow consigliato (3 passaggi)
-Pass 1 – Generazione base (SDXL)
-Modello: JuggernautXL (checkpoint)
-
-VAE: sdxl-vae-fp16-fix
-
-ControlNet:
-
-Depth 0.8–1.0 (prospettiva/volumi)
-
-Canny 0.6–0.8 (bordi/layout)
-
-Sampler: DPM++ 2M Karras, 30–40 steps, CFG 7–8
-
-Risoluzione: 1024–1536px lato lungo
-
-Output: immagine base pulita e coerente
-
-Pass 2 – Raffinamento (Refiner)
-Modello: SDXL Refiner (Diffusers)
-
-Modalità: img2img sul risultato del Pass 1
-
-Denoise: 0.20–0.35
-
-(Opzionale) riapplica ControlNet se vuoi “inchiodare” il layout
-
-Output: micro‑dettaglio e transizioni migliorate
-
-Pass 3 – Upscaling a tile (SDXL)
-ControlNet: Tile XL (tile size 512–768, weight ~0.9)
-
-KSampler: img2img con denoise ~0.2 usando SDXL (JuggernautXL o Refiner)
-
-Output: 2× / 4×. Facoltativo: ESRGAN UltraSharp o Remacri per nitidezza extra
-
-📋 Prompting e consigli
-Prompt breve e prescrittivo: soggetto → materiali → luce → camera → palette.
-
-Negative severi (esempi): blurry, overexposed, distorted geometry, color banding, lowres.
-
-Se non segue il prompt:
-
-Aumenta peso dei ControlNet chiave
-
-Ripulisci gli aggettivi superflui
-
-Prova CFG 8–9 (con eventuale CFG rescale)
-
-Usa il pass 2 con denoise più basso (0.2–0.25)
-
-🧪 Esempio Comandi (RunPod / SSH)
+Copia codice
+cd /workspace/comfyui-scripts
+chmod +x setup_runpod_comfyui.sh
+export HF_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx   # ← opzionale
+./setup_runpod_comfyui.sh
+Solo update repo
 bash
-Copia
-# 1) Imposta (opzionale) posizione di ComfyUI
-export COMFY="$HOME/ComfyUI"
+Copia codice
+cd /workspace/comfyui-scripts
+git pull
+✅ Modelli inclusi nello script
+Juggernaut XL Inpainting (Civitai)
 
-# 2) (Opzionale) token Hugging Face per modelli con licenza
-export HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+IP-Adapter SDXL image encoder (h94)
 
-# 3) Scarica ed esegui setup
-wget "https://raw.githubusercontent.com/emazeck/comfyui-scripts/refs/heads/main/setup_sdxl_env.sh" -O setup_sdxl_env.sh
-chmod +x setup_sdxl_env.sh
-./setup_sdxl_env.sh
-❗ Troubleshooting
-403 Forbidden (HF): accetta la licenza del modello su Hugging Face e fai huggingface-cli login o esporta HF_TOKEN.
+IP-Adapter Plus SD15 (h94)
 
-Percorsi diversi: imposta COMFY prima di eseguire lo script.
+SDXL VAE (StabilityAI)
 
-ESRGAN mancanti: posiziona manualmente i .pth in models/upscale_models/.
+Upscaler 4x-UltraSharp (lokCX)
 
-VRAM limitata: genera a 1024px e scala in più step (Tile 2× + ESRGAN).
+📌 Note
+Lo script lavora solo nella cartella ./ComfyUI → deve esistere già.
 
-📜 Licenze
-I modelli mantengono le loro licenze originali su Hugging Face.
-Verifica sempre termini e condizioni prima dell’uso in produzione.
+Se un download da Civitai scade, sostituisci con un mirror Hugging Face.
 
-perl
+Tutte le dipendenze (git, aria2c, wget, curl, huggingface_hub, safetensors) vengono installate automaticamente.
+
+yaml
+Copia codice
+
 Copia
 
 Vuoi che ti apra direttamente una PR con questo README aggiornato così fai “Merge” al volo?

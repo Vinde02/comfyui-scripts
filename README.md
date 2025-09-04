@@ -1,49 +1,64 @@
-# 🚀 Setup RunPod ComfyUI Scripts
+# 🚀 ComfyUI Setup Script for RunPod
 
-Questo repository contiene **`setup_runpod_comfyui.sh`**, uno script automatico pensato per installare e configurare **modelli essenziali per ComfyUI** in ambiente **RunPod** (o qualsiasi container Linux).
+[![Status](https://img.shields.io/badge/status-tested%20on%20RunPod-brightgreen)](https://www.runpod.io/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Shell](https://img.shields.io/badge/shell-bash-lightgrey)](https://www.gnu.org/software/bash/)
 
-## 🛠️ Cosa fa lo script
-- Crea automaticamente tutte le cartelle `models/` necessarie (`checkpoints`, `vae`, `controlnet`, `ipadapter`, `loras`, `upscale_models`).
-- Scarica i modelli principali (Juggernaut XL Inpainting, IP-Adapter, SDXL VAE, Upscaler 4x-UltraSharp).
-- Verifica l’integrità dei file `.safetensors`.
-- Gestisce download con retry, resume e supporto Hugging Face.
-- Non richiede input interattivi → perfetto per RunPod.
+Questo repository contiene **`setup_runpod_comfyui.sh`**, uno script **automatizzato** per installare modelli essenziali in **ComfyUI** su ambienti **RunPod** (GPU container) o Linux.  
+👉 Lo script è stato **testato con successo su RunPod**.
 
 ---
 
-## 📥 Clonare la repo
+## 🛠️ Funzionalità
+- ✅ Crea tutte le cartelle `models/` necessarie:
+  - `checkpoints`, `vae`, `controlnet`, `ipadapter`, `loras`, `upscale_models`
+- ✅ Scarica e installa modelli essenziali:
+  - Juggernaut XL Inpainting
+  - IP-Adapter SDXL image encoder
+  - IP-Adapter Plus SD15
+  - SDXL VAE (corretto)
+  - Upscaler 4x-UltraSharp (mirror stabile)
+- ✅ Verifica integrità dei file `.safetensors`
+- ✅ Supporto **retry, resume download**
+- ✅ Compatibile con Hugging Face (`HF_TOKEN` opzionale)
+- ✅ Nessun input interattivo (perfetto per container RunPod)
+
+---
+
+## 📥 Installazione
+
+Clona la repo dentro la tua area di lavoro RunPod (tipicamente `/workspace`):
 
 ```bash
 cd /workspace
 git clone https://github.com/Vinde02/comfyui-scripts.git
 cd comfyui-scripts
-▶️ Avviare l’installazione
-Assicurati di avere la cartella ComfyUI in /workspace (o nella stessa directory da cui lanci).
+▶️ Avvio script
+Assicurati di avere la cartella ComfyUI dentro /workspace.
 
 bash
 Copia codice
 chmod +x setup_runpod_comfyui.sh
 ./setup_runpod_comfyui.sh
-🔑 (Opzionale) Hugging Face Token
-Alcuni modelli pubblici non richiedono token.
-👉 Se invece vuoi scaricare modelli da repo privati o con licenza accettata, devi esportare il tuo HF_TOKEN.
+🔑 Hugging Face Token (Opzionale)
+I modelli inclusi sono pubblici → non serve token.
+Se però vuoi installare modelli da repo privati o con licenza accettata, esporta il tuo HF_TOKEN:
 
-Come aggiungere il token
 bash
 Copia codice
 export HF_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ./setup_runpod_comfyui.sh
-📌 Nota: senza HF_TOKEN lo script funziona comunque per i modelli pubblici già inclusi.
+📌 Senza token, lo script funziona comunque per i modelli già inclusi.
 
-📋 Script veloci
-Installazione completa (con token se serve)
+📋 Script rapidi
+Installazione completa (con token opzionale)
 bash
 Copia codice
 cd /workspace/comfyui-scripts
 chmod +x setup_runpod_comfyui.sh
 export HF_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx   # ← opzionale
 ./setup_runpod_comfyui.sh
-Solo update repo
+Aggiornare la repo
 bash
 Copia codice
 cd /workspace/comfyui-scripts
@@ -55,21 +70,27 @@ IP-Adapter SDXL image encoder (h94)
 
 IP-Adapter Plus SD15 (h94)
 
-SDXL VAE (StabilityAI)
+SDXL VAE (StabilityAI, URL corretto)
 
-Upscaler 4x-UltraSharp (lokCX)
+Upscaler 4x-UltraSharp (lokCX, mirror stabile)
 
-📌 Note
+📌 Note importanti
 Lo script lavora solo nella cartella ./ComfyUI → deve esistere già.
 
-Se un download da Civitai scade, sostituisci con un mirror Hugging Face.
+Se un link da Civitai scade, sostituiscilo con un mirror Hugging Face.
 
-Tutte le dipendenze (git, aria2c, wget, curl, huggingface_hub, safetensors) vengono installate automaticamente.
+Le dipendenze necessarie (git, git-lfs, aria2c, wget, curl, huggingface_hub, safetensors) vengono installate automaticamente.
+
+Warning di pip root user già soppressi con --root-user-action=ignore.
+
+🧪 Testato su
+ RunPod GPU container (Ubuntu 22.04)
+
+ Altri ambienti Linux (non ancora testati)
+
+📜 Licenza
+Distribuito sotto licenza MIT.
 
 yaml
 Copia codice
 
-Copia
-
-Vuoi che ti apra direttamente una PR con questo README aggiornato così fai “Merge” al volo?
-::contentReference[oaicite:0]{index=0}

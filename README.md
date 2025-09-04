@@ -51,9 +51,9 @@ export HF_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ./setup_runpod_comfyui.sh
 ```
 
-📌 Senza token, lo script funziona comunque per i modelli già inclusi.
+> 📌 Senza token, lo script funziona comunque per i modelli già inclusi.
 
-📋 Script rapidi
+## 📋 Script rapidi
 Installazione completa (con token opzionale)
 
 ```
@@ -70,15 +70,15 @@ git pull
 ```
 
 ## ✅ Modelli inclusi nello script
-Juggernaut XL Inpainting (Civitai)
+-Juggernaut XL Inpainting (Civitai)
 
-IP-Adapter SDXL image encoder (h94)
+-IP-Adapter SDXL image encoder (h94)
 
-IP-Adapter Plus SD15 (h94)
+-IP-Adapter Plus SD15 (h94)
 
-SDXL VAE (StabilityAI, URL corretto)
+-SDXL VAE (StabilityAI, URL corretto)
 
-Upscaler 4x-UltraSharp (lokCX, mirror stabile)
+-Upscaler 4x-UltraSharp (lokCX, mirror stabile)
 
 ## 📌 Note importanti
 Lo script lavora solo nella cartella ./ComfyUI → deve esistere già.
@@ -90,9 +90,9 @@ Le dipendenze necessarie (git, git-lfs, aria2c, wget, curl, huggingface_hub, saf
 Warning di pip root user già soppressi con --root-user-action=ignore.
 
 ## 🧪 Testato su
- RunPod GPU container (Ubuntu 22.04)
+ *RunPod GPU container (Ubuntu 22.04)
 
- Altri ambienti Linux (non ancora testati)
+ *Altri ambienti Linux (non ancora testati)
 
 ## 📜 Licenza
 Distribuito sotto licenza MIT.

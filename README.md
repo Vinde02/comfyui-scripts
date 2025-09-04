@@ -50,6 +50,13 @@ una volta aperto il nano in colla lo script di seguito e poi premi: "ctrl+o" -->
 #!/usr/bin/env bash
 set -euo pipefail
 
+err(){ printf "\e[31m[ERR]\e[0m %s\n" "$*" >&2; }
+warn(){ printf "\e[33m[WARN]\e[0m %s\n" "$*"; }
+log(){ printf "\e[36m[INFO]\e[0m %s\n" "$*"; }
+trap 'err "Linea $LINENO fallita (exit $?)"' ERR
+: "${MIN_FREE_GB:=10}"
+
+
 # Configura qui il tuo repo e lo script
 REPO_URL="https://github.com/Vinde02/comfyui-scripts.git"
 REPO_DIR="comfyui-scripts"

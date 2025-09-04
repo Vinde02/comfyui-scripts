@@ -1,148 +1,171 @@
 #!/usr/bin/env bash
+# setup_runpod_comfyui.sh — Installatore modelli ComfyUI per RunPod (no prompt)
+# - Lavora esclusivamente in ./ComfyUI (relativo a dove lanci lo script)
+# - Usa HF_TOKEN se presente (no prompt login)
+# - Retry, resume download, validazione .safetensors, riepilogo finale
+
 set -euo pipefail
+RED='\033[0;31m'; YEL='\033[0;33m'; GRN='\033[0;32m'; NC='\033[0m'
+log(){ echo -e "${GRN}[INFO]${NC} $*"; }
+warn(){ echo -e "${YEL}[WARN]${NC} $*" >&2; }
+err(){ echo -e "${RED}[ERROR]${NC} $*" >&2; }
+trap 'err "Fallito alla linea $LINENO"; exit 1' ERR
 
-# ========== Logging ==========
-err(){ printf "\e[31m[ERR]\e[0m %s\n" "$*" >&2; }
-warn(){ printf "\e[33m[WARN]\e[0m %s\n" "$*"; }
-log(){ printf "\e[36m[INFO]\e[0m %s\n" "$*"; }
-trap 'err "Linea $LINENO (exit $?)"' ERR
-
-# ========== Defaults ==========
-: "${ASSUME_YES:=1}"
-: "${MIN_FREE_GB:=10}"
-: "${MAX_RETRIES:=5}"
-: "${DL_TIMEOUT:=0}"
-: "${FORCE_REDOWNLOAD:=0}"
-
-# Abilita/Disabilita “pacchetti”
-: "${ENABLE_JXL_INP:=1}"
-: "${ENABLE_IP_ADAPTER:=1}"
-: "${ENABLE_UPSCALERS:=1}"
-: "${ENABLE_CONTROLNET:=0}"   # metti a 1 quando aggiungi URL reali sotto
-: "${ENABLE_VAE:=0}"          # idem
-
-# ========== Percorsi ==========
-COMFY="${COMFY:-/workspace/ComfyUI}"
-COMFY="$(realpath -m "$COMFY")"
-[[ -d "$COMFY" ]] || { err "Cartella ComfyUI non trovata: $COMFY"; exit 5; }
+# ===== Config =====
+COMFY="$(realpath -m ./ComfyUI)"     # cartella di lavoro OBBLIGATORIA (relativa)
+[[ -d "$COMFY" ]] || { err "Cartella '$COMFY' non trovata. Crea/posiziona qui ComfyUI e rilancia."; exit 5; }
+ASSUME_YES="${ASSUME_YES:-1}"
+MIN_FREE_GB="${MIN_FREE_GB:-10}"
+# Puoi forzare: COMFY=/workspace/ComfyUI ./setup_runpod_comfyui.sh
+if [[ -n "${COMFY:-}" ]]; then
+  COMFY="$(realpath -m "$COMFY")"
+else
+  for cand in "/workspace/ComfyUI" "$PWD/../ComfyUI" "$HOME/ComfyUI" "$PWD/ComfyUI"; do
+    [[ -d "$cand" ]] && COMFY="$(realpath -m "$cand")" && break
+  done
+fi
+[[ -z "${COMFY:-}" || ! -d "$COMFY" ]] && err "Cartella ComfyUI non trovata. Imposta COMFY=/percorso/ComfyUI oppure crea la cartella." && exit 5
 log "ComfyUI: $COMFY"
 
-CKPT="$COMFY/models/checkpoints"
-VAE="$COMFY/models/vae"
-LORAS="$COMFY/models/loras"
-CN="$COMFY/models/controlnet"
-IPA="$COMFY/models/ipadapter"
-UPS="$COMFY/models/upscale_models"
-mkdir -p "$CKPT" "$VAE" "$LORAS" "$CN" "$IPA" "$UPS"
+# ===== Cartelle modelli =====
+mkdir -p "$COMFY/models/"{checkpoints,vae,diffusers,controlnet,ipadapter,loras,upscale_models}
 
-# ========== Utility ==========
+# ===== Dipendenze (non-interattive) =====
+if command -v apt-get >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -y
+  apt-get install -y --no-install-recommends git git-lfs aria2 curl wget ca-certificates python3-pip python3-venv
+  git lfs install --skip-repo || true
+fi
+python3 -m pip install --upgrade --no-input --root-user-action=ignore pip
+python3 -m pip install --no-input --root-user-action=ignore huggingface_hub safetensors
+
+# ===== Hugging Face (opzionale, no prompt) =====
+if [[ -n "${HF_TOKEN:-}" ]]; then
+  log "Configuro Hugging Face in modalità non-interattiva"
+  huggingface-cli login --token "$HF_TOKEN" --add-to-git-credential || warn "Login HF: se serve accettare una licenza, fallo dal sito."
+fi
+
+# ===== Utility =====
+# Niente float: df -PBG -> 4° campo tipo '233G', awk +0 -> intero
 free_gb(){ df -PBG "$COMFY" | awk 'NR==2{print $4+0}'; }
-ask(){ (( ASSUME_YES )) && return 0; read -rp "$1 [y/N] " a; [[ "${a,,}" == y ]]; }
-download(){ # download URL DEST
-  local url="${1:-}"; local dest="${2:-}"
-  [[ -n "$url" && -n "$dest" ]] || { err "download(): url/dest mancanti"; return 2; }
-  local tmp="${dest}.part"; mkdir -p "$(dirname "$dest")"
-  if [[ -f "$dest" && $FORCE_REDOWNLOAD -eq 0 ]]; then
-    log "Già presente: $(basename "$dest") (skip)"
-    return 0
-  fi
-  local tries=0
-  while (( tries < MAX_RETRIES )); do
-    ((tries++))
-    if curl -fL --retry "$MAX_RETRIES" --retry-delay 2 --continue-at - \
-         ${DL_TIMEOUT:+--max-time "$DL_TIMEOUT"} -o "$tmp" "$url"; then
-      if [[ "$(stat -c%s "$tmp" 2>/dev/null || echo 0)" -gt $((1*1024*1024)) ]]; then
-        mv -f "$tmp" "$dest"; log "OK: $(basename "$dest")"; return 0
-      else
-        warn "File troppo piccolo, ritento ($tries/$MAX_RETRIES)…"
-      fi
-    else
-      warn "Tentativo $tries fallito, ritento…"
-    fi
-    sleep 1
-  done
-  err "Impossibile scaricare: $url"; return 1
-}
-validate_safetensor(){ local f="${1:-}"; [[ -f "$f" ]] || { err "Manca $f"; return 1; }; (( $(stat -c%s "$f") > 10*1024*1024 )) || { err "File sospetto (<10MB): $f"; return 1; }; }
-
-# ========== Check spazio ==========
 if (( $(free_gb) < MIN_FREE_GB )); then
   warn "Spazio libero < ${MIN_FREE_GB}GB: i download pesanti potrebbero fallire."
-  ask "Continuare?" || { warn "Interrotto."; exit 0; }
 fi
 
-# ========== Dipendenze minime ==========
-python3 -m pip install -q --upgrade pip
-python3 -m pip install -q --no-cache-dir safetensors huggingface_hub
+# downloader con retry + header HF se necessario; usa aria2c > curl > wget
+fetch(){
+  local url="$1" out="$2" tries=5
+  if [[ -s "$out" ]]; then log "Già presente: $(basename "$out") — skip"; return 0; fi
+  mkdir -p "$(dirname "$out")"
 
-log "Cartelle modelli pronte."
+  # aria2c (multi-connessioni) con resume
+  if command -v aria2c >/dev/null 2>&1; then
+    if [[ "$url" == *"huggingface.co"* && -n "${HF_TOKEN:-}" ]]; then
+      aria2c -c -x8 -s8 -k1M --retry-wait=3 --max-tries="$tries" \
+        --header="Authorization: Bearer $HF_TOKEN" -o "$out" "$url"
+    else
+      aria2c -c -x8 -s8 -k1M --retry-wait=3 --max-tries="$tries" \
+        -o "$out" "$url"
+    fi
+    return $?
+  fi
 
-# ------------------------------------------------------------------------------
-# MANIFEST: aggiungi qui tutti i modelli che vuoi scaricare.
-# Formato: add_item "URL" "/destinazione/assoluta/del/file"
-# ------------------------------------------------------------------------------
+  # Fallback: curl con resume (-C -)
+  if command -v curl >/dev/null 2>&1; then
+    if [[ "$url" == *"huggingface.co"* && -n "${HF_TOKEN:-}" ]]; then
+      curl -L --fail -C - --retry "$tries" --retry-delay 2 \
+        -H "Authorization: Bearer $HF_TOKEN" -o "$out" "$url"
+    else
+      curl -L --fail -C - --retry "$tries" --retry-delay 2 \
+        -o "$out" "$url"
+    fi
+    return $?
+  fi
 
-items=()
+  # Ultima spiaggia: wget
+  if [[ "$url" == *"huggingface.co"* && -n "${HF_TOKEN:-}" ]]; then
+    wget -c --tries="$tries" --timeout=30 \
+      --header="Authorization: Bearer $HF_TOKEN" -O "$out" "$url"
+  else
+    wget -c --tries="$tries" --timeout=30 -O "$out" "$url"
+  fi
+}
 
-add_item(){ items+=("$1|$2"); }
+# validazione veloce .safetensors
+validate_st(){
+  local f="$1"
+  [[ -s "$f" ]] || return 1
+  python3 - "$f" <<'PY' || return 1
+import sys
+from safetensors import safe_open
+with safe_open(sys.argv[1],"pt") as s:
+    list(s.keys())
+PY
+}
 
-# --- 1) Juggernaut XL Inpainting (checkpoint) ---
-if (( ENABLE_JXL_INP )); then
-  # Nota: i link Civitai sono spesso temporanei. Puoi passare una URL via env:
-  # JXL_INP_URL="https://..." ./setup_runpod_comfyui.sh
-  JXL_INP_URL="${JXL_INP_URL:-https://civitai.com/api/download/models/129549}"
-  add_item "$JXL_INP_URL" "$CKPT/juggernaut_aftermath-inpainting.safetensors"
-fi
+# ===== Elenco modelli (URL -> destinazioni) =====
+# NOTE: link Civitai possono scadere: sostituiscili con mirror HF stabili se serve.
+declare -a DL_URLS=(
+  # Juggernaut XL Inpainting (checkpoint)
+  "https://civitai.com/api/download/models/129549|$COMFY/models/checkpoints/juggernaut_xl_inpainting.safetensors"
 
-# --- 2) IP-Adapter (encoder + modello SD15 plus) ---
-if (( ENABLE_IP_ADAPTER )); then
-  # Questi sono link Hugging Face (stabili al momento):
-  add_item "https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors" \
-           "$IPA/sd15_image_encoder.safetensors"
-  add_item "https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/image_encoder/model.safetensors" \
-           "$IPA/sdxl_image_encoder.safetensors"
-  add_item "https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter-plus_sd15.safetensors" \
-           "$IPA/ip-adapter-plus_sd15.safetensors"
-fi
+  # IP-Adapter SD15 image encoder (pubblico)
+  "https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors|$COMFY/models/ipadapter/ipadapter_sd15_image_encoder.safetensors"
 
-# --- 3) Upscalers (Real-ESRGAN esempi) ---
-if (( ENABLE_UPSCALERS )); then
-  # Se vuoi cambiare, passa UPS_URL_* via env.
-  add_item "${UPS_URL_X4PLUS:-https://huggingface.co/ai-forever/Real-ESRGAN/resolve/main/RealESRGAN_x4plus.pth}" \
-           "$UPS/RealESRGAN_x4plus.pth"
-  add_item "${UPS_URL_X4_ANIME:-https://huggingface.co/ai-forever/Real-ESRGAN/resolve/main/RealESRGAN_x4plus_anime_6B.pth}" \
-           "$UPS/RealESRGAN_x4plus_anime_6B.pth"
-fi
+  # IP-Adapter SDXL image encoder (pubblico)
+  "https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/image_encoder/model.safetensors|$COMFY/models/ipadapter/ipadapter_sdxl_image_encoder.safetensors"
 
-# --- 4) ControlNet SDXL (placeholder: aggiungi i tuoi URL reali) ---
-if (( ENABLE_CONTROLNET )); then
-  # Esempi (SOSTITUISCI con URL reali dei tuoi modelli .safetensors o .pth):
-  # add_item "https://tuo-host/controlnet/sdxl-canny.safetensors" "$CN/sdxl_canny.safetensors"
-  # add_item "https://tuo-host/controlnet/sdxl-depth.safetensors" "$CN/sdxl_depth.safetensors"
-  :
-fi
+  # IP-Adapter Plus SD15 (pubblico)
+  "https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter-plus_sd15.safetensors|$COMFY/models/ipadapter/ip-adapter-plus_sd15.safetensors"
 
-# --- 5) VAE (placeholder) ---
-if (( ENABLE_VAE )); then
-  # Esempio (SOSTITUISCI con il tuo VAE preferito):
-  # add_item "https://tuo-host/vae/sdxl_fp16_fix.safetensors" "$VAE/sdxl_fp16_fix.safetensors"
-  :
-fi
+  # SDXL VAE (stabile)
+  "https://huggingface.co/stabilityai/sdxl-vae/resolve/main/sdxl_vae.safetensors|$COMFY/models/vae/sdxl_vae.safetensors"
 
-# ------------------------------------------------------------------------------
-# ESECUZIONE MANIFEST
-# ------------------------------------------------------------------------------
-if ((${#items[@]}==0)); then
-  warn "Manifest vuoto: nessun modello da scaricare (controlla le opzioni ENABLE_*)."
-else
-  log "Scarico ${#items[@]} elemento/i dal manifest…"
-fi
+  # Upscaler 4x-UltraSharp (stabile)
+  "https://huggingface.co/lokCX/4x-Ultrasharp/resolve/main/4x-UltraSharp.pth|$COMFY/models/upscale_models/4x-UltraSharp.pth"
+)
 
-for entry in "${items[@]}"; do
-  url="${entry%%|*}"
-  dest="${entry##*|}"
-  download "$url" "$dest" || true
-  [[ "$dest" == *.safetensors ]] && validate_safetensor "$dest" || true
+# ===== Download & validazione =====
+OK_LIST=(); SKIP_LIST=(); FAIL_LIST=(); CORRUPT_LIST=()
+for item in "${DL_URLS[@]}"; do
+  url="${item%%|*}"; out="${item##*|}"
+  name="$(basename "$out")"
+
+  if [[ -s "$out" ]]; then
+    log "Skip (presente): $name"; SKIP_LIST+=("$name"); continue
+  fi
+
+  log "Scarico: $name"
+  if fetch "$url" "$out"; then
+    if [[ "$out" == *.safetensors ]]; then
+      if validate_st "$out"; then
+        log "OK validato: $name"; OK_LIST+=("$name")
+      else
+        warn "File corrotto: $name — ritento una volta…"
+        rm -f "$out"
+        if fetch "$url" "$out" && validate_st "$out"; then
+          log "OK dopo retry: $name"; OK_LIST+=("$name")
+        else
+          err "Integrità non valida: $name"; CORRUPT_LIST+=("$name")
+        fi
+      fi
+    else
+      log "OK scaricato: $name"; OK_LIST+=("$name")
+    fi
+  else
+    err "Download fallito: $name"; FAIL_LIST+=("$name")
+  fi
 done
 
-log "Setup RunPod/ComfyUI COMPLETATO."
+# ===== Riepilogo =====
+echo -e "\n${GRN}==== RIEPILOGO ====${NC}"
+echo "Installati: ${#OK_LIST[@]}"; ((${#OK_LIST[@]})) && printf ' - %s\n' "${OK_LIST[@]}"
+echo "Presenti/Skippati: ${#SKIP_LIST[@]}"; ((${#SKIP_LIST[@]})) && printf ' - %s\n' "${SKIP_LIST[@]}"
+echo -e "${YEL}Falliti:${NC} ${#FAIL_LIST[@]}"; ((${#FAIL_LIST[@]})) && printf ' - %s\n' "${FAIL_LIST[@]}"
+echo -e "${RED}Corrotti:${NC} ${#CORRUPT_LIST[@]}"; ((${#CORRUPT_LIST[@]})) && printf ' - %s\n' "${CORRUPT_LIST[@]}"
+
+# Codici uscita semantici
+((${#CORRUPT_LIST[@]})) && exit 3
+((${#FAIL_LIST[@]})) && exit 6
+exit 0

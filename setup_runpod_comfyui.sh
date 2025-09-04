@@ -1,148 +1,109 @@
-err(){ echo -e "${RED}[ERROR]${NC} $*" >&2; }
-trap 'err "Fallito alla linea $LINENO"; exit 1' ERR
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Invece di forzare sempre ./ComfyUI
+# ========== Logging ==========
+err(){ printf "\e[31m[ERR]\e[0m %s\n" "$*" >&2; }
+warn(){ printf "\e[33m[WARN]\e[0m %s\n" "$*"; }
+log(){ printf "\e[36m[INFO]\e[0m %s\n" "$*"; }
+trap 'err "Linea $LINENO fallita (exit $?)"' ERR
+
+# ========== Defaults sicuri ==========
+: "${ASSUME_YES:=1}"        # 1 = non chiedere conferme
+: "${MIN_FREE_GB:=10}"      # soglia di spazio libero in GB per avviso
+: "${MAX_RETRIES:=5}"       # tentativi per download
+: "${DL_TIMEOUT:=0}"        # 0 = nessun timeout curl; altrimenti secondi
+: "${FORCE_REDOWNLOAD:=0}"  # 1 = forza riscarico anche se file presente
+
+# ========== Percorso ComfyUI (normalizzato, niente doppio /workspace) ==========
 COMFY="${COMFY:-/workspace/ComfyUI}"
 COMFY="$(realpath -m "$COMFY")"
+[[ -d "$COMFY" ]] || { err "Cartella ComfyUI non trovata: $COMFY"; exit 5; }
+log "ComfyUI: $COMFY"
 
-ASSUME_YES="${ASSUME_YES:-1}"
-MIN_FREE_GB="${MIN_FREE_GB:-10}"
+# ========== Utility ==========
+# Spazio libero in GB interi (evita float/scientific notation)
+free_gb(){ df -PBG "$COMFY" | awk 'NR==2{print $4+0}'; }
+ensure_dir(){ mkdir -p "$1"; }
+ask(){ (( ASSUME_YES )) && return 0; read -rp "$1 [y/N] " a; [[ "${a,,}" == y ]]; }
 
-# ===== Cartelle modelli =====
-mkdir -p "$COMFY/models/"{checkpoints,vae,diffusers,controlnet,ipadapter,loras,upscale_models}
-
-# ===== Dipendenze (non-interattive) =====
-if command -v apt-get >/dev/null 2>&1; then
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update -y
-  apt-get install -y --no-install-recommends git git-lfs aria2 curl wget ca-certificates python3-pip python3-venv
-  git lfs install --skip-repo || true
-fi
-python3 -m pip install --upgrade --no-input --root-user-action=ignore pip
-python3 -m pip install --no-input --root-user-action=ignore huggingface_hub safetensors
-
-# ===== Hugging Face (opzionale, no prompt) =====
-if [[ -n "${HF_TOKEN:-}" ]]; then
-  log "Configuro Hugging Face in modalità non-interattiva"
-  huggingface-cli login --token "$HF_TOKEN" --add-to-git-credential || warn "Login HF: se serve accettare una licenza, fallo dal sito."
-fi
-
-# ===== Utility =====
-free_gb(){ df -P "$COMFY" | awk 'NR==2{gsub("G","",$4); print int($4/1)}'; }
-if [[ "$(free_gb)" -lt "$MIN_FREE_GB" ]]; then
-  warn "Spazio libero < ${MIN_FREE_GB}GB: i download pesanti potrebbero fallire."
-fi
-
-# downloader con retry + header HF se necessario; usa aria2c > curl > wget
-fetch(){
-  local url="$1" out="$2" tries=5
-  if [[ -s "$out" ]]; then log "Già presente: $(basename "$out") — skip"; return 0; fi
-  mkdir -p "$(dirname "$out")"
-
-  # Preferisci aria2c (multi-connessioni) con resume implicito
-  if command -v aria2c >/dev/null 2>&1; then
-    if [[ "$url" == *"huggingface.co"* && -n "${HF_TOKEN:-}" ]]; then
-      aria2c -c -x8 -s8 -k1M --retry-wait=3 --max-tries="$tries" \
-        --header="Authorization: Bearer $HF_TOKEN" -o "$out" "$url"
-    else
-      aria2c -c -x8 -s8 -k1M --retry-wait=3 --max-tries="$tries" \
-        -o "$out" "$url"
-    fi
-    return $?
+# Download robusto con resume, retry e file temporaneo .part
+download(){ # usage: download URL DEST
+  local url="${1:-}"; local dest="${2:-}"
+  [[ -n "$url" && -n "$dest" ]] || { err "download(): url/dest mancanti"; return 2; }
+  local tmp="${dest}.part"
+  ensure_dir "$(dirname "$dest")"
+  if [[ -f "$dest" && $FORCE_REDOWNLOAD -eq 0 ]]; then
+    log "Già presente: $(basename "$dest") (skip)"
+    return 0
   fi
-
-  # Fallback: curl con resume (-C -)
-  if command -v curl >/dev/null 2>&1; then
-    if [[ "$url" == *"huggingface.co"* && -n "${HF_TOKEN:-}" ]]; then
-      curl -L --fail -C - --retry "$tries" --retry-delay 2 \
-        -H "Authorization: Bearer $HF_TOKEN" -o "$out" "$url"
-    else
-      curl -L --fail -C - --retry "$tries" --retry-delay 2 \
-        -o "$out" "$url"
-    fi
-    return $?
-  fi
-
-  # Ultima spiaggia: wget
-  if [[ "$url" == *"huggingface.co"* && -n "${HF_TOKEN:-}" ]]; then
-    wget -c --tries="$tries" --timeout=30 \
-      --header="Authorization: Bearer $HF_TOKEN" -O "$out" "$url"
-  else
-    wget -c --tries="$tries" --timeout=30 -O "$out" "$url"
-  fi
-}
-
-# validazione veloce .safetensors
-validate_st(){
-  local f="$1"
-  [[ -s "$f" ]] || return 1
-  python3 - "$f" <<'PY' || return 1
-import sys
-from safetensors import safe_open
-with safe_open(sys.argv[1],"pt") as s:
-    list(s.keys())
-PY
-}
-
-# ===== Elenco modelli (URL corretti) =====
-# Nota: i link Civitai possono scadere; se falliscono, sostituiscili con mirror HF stabili.
-declare -a DL_URLS=(
-  # Juggernaut XL Inpainting (cambia se usi un mirror stabile)
-  "https://civitai.com/api/download/models/129549|$COMFY/models/checkpoints/juggernaut_xl_inpainting.safetensors"
-
-  # IP-Adapter SDXL image encoder (pubblico)
-  "https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/image_encoder/model.safetensors|$COMFY/models/ipadapter/ipadapter_sdxl_image_encoder.safetensors"
-
-  # IP-Adapter Plus SD15 (pubblico)
-  "https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter-plus_sd15.safetensors|$COMFY/models/ipadapter/ip-adapter-plus_sd15.safetensors"
-
-  # ✅ SDXL VAE (URL corretto)
-  "https://huggingface.co/stabilityai/sdxl-vae/resolve/main/sdxl_vae.safetensors|$COMFY/models/vae/sdxl_vae.safetensors"
-
-  # ✅ Upscaler 4x-UltraSharp (mirror stabile)
-  "https://huggingface.co/lokCX/4x-Ultrasharp/resolve/main/4x-UltraSharp.pth|$COMFY/models/upscale_models/4x-UltraSharp.pth"
-)
-
-# ===== Download & validazione =====
-OK_LIST=(); SKIP_LIST=(); FAIL_LIST=(); CORRUPT_LIST=()
-for item in "${DL_URLS[@]}"; do
-  url="${item%%|*}"; out="${item##*|}"
-  name="$(basename "$out")"
-
-  if [[ -s "$out" ]]; then
-    log "Skip (presente): $name"; SKIP_LIST+=("$name"); continue
-  fi
-
-  log "Scarico: $name"
-  if fetch "$url" "$out"; then
-    if [[ "$out" == *.safetensors ]]; then
-      if validate_st "$out"; then
-        log "OK validato: $name"; OK_LIST+=("$name")
+  local tries=0
+  while (( tries < MAX_RETRIES )); do
+    ((tries++))
+    if curl -fL --retry "$MAX_RETRIES" --retry-delay 2 --continue-at - \
+         ${DL_TIMEOUT:+--max-time "$DL_TIMEOUT"} -o "$tmp" "$url"; then
+      # controllo dimensione minima > 1MB per evitare file troncati
+      if [[ "$(stat -c%s "$tmp" 2>/dev/null || echo 0)" -gt $((1*1024*1024)) ]]; then
+        mv -f "$tmp" "$dest"
+        log "OK: $(basename "$dest")"
+        return 0
       else
-        warn "File corrotto: $name — ritento una volta…"
-        rm -f "$out"
-        if fetch "$url" "$out" && validate_st "$out"; then
-          log "OK dopo retry: $name"; OK_LIST+=("$name")
-        else
-          err "Integrità non valida: $name"; CORRUPT_LIST+=("$name")
-        fi
+        warn "File troppo piccolo, ritento ($tries/$MAX_RETRIES)…"
       fi
     else
-      log "OK scaricato: $name"; OK_LIST+=("$name")
+      warn "Tentativo $tries fallito, ritento…"
     fi
-  else
-    err "Download fallito: $name"; FAIL_LIST+=("$name")
-  fi
-done
+    sleep 1
+  done
+  err "Impossibile scaricare: $url"
+  return 1
+}
 
-# ===== Riepilogo =====
-echo -e "\n${GRN}==== RIEPILOGO ====${NC}"
-echo "Installati: ${#OK_LIST[@]}"; ((${#OK_LIST[@]})) && printf ' - %s\n' "${OK_LIST[@]}"
-echo "Presenti/Skippati: ${#SKIP_LIST[@]}"; ((${#SKIP_LIST[@]})) && printf ' - %s\n' "${SKIP_LIST[@]}"
-echo -e "${YEL}Falliti:${NC} ${#FAIL_LIST[@]}"; ((${#FAIL_LIST[@]})) && printf ' - %s\n' "${FAIL_LIST[@]}"
-echo -e "${RED}Corrotti:${NC} ${#CORRUPT_LIST[@]}"; ((${#CORRUPT_LIST[@]})) && printf ' - %s\n' "${CORRUPT_LIST[@]}"
+validate_safetensor(){ # controllo base anti-file troncati
+  local f="${1:-}"
+  [[ -f "$f" ]] || { err "Manca file: $f"; return 1; }
+  (( $(stat -c%s "$f") > 10*1024*1024 )) || { err "Probabile file corrotto (<10MB): $f"; return 1; }
+}
 
-# Codici uscita semantici
-((${#CORRUPT_LIST[@]})) && exit 3
-((${#FAIL_LIST[@]})) && exit 6
-exit 0
+# ========== Check spazio ==========
+if (( $(free_gb) < MIN_FREE_GB )); then
+  warn "Spazio libero < ${MIN_FREE_GB}GB: i download pesanti potrebbero fallire."
+  ask "Continuare?" || { warn "Interrotto."; exit 0; }
+fi
+
+# ========== Install dipendenze minime Python (idempotente) ==========
+log "Installo/aggiorno pacchetti Python necessari…"
+python3 -m pip install -q --upgrade pip
+python3 -m pip install -q --no-cache-dir safetensors huggingface_hub
+
+# ========== Struttura cartelle ComfyUI ==========
+CKPT="$COMFY/models/checkpoints"
+VAE="$COMFY/models/vae"
+LORAS="$COMFY/models/loras"
+CN="$COMFY/models/controlnet"
+IPA="$COMFY/models/ipadapter"
+UPS="$COMFY/models/upscale_models"
+ensure_dir "$CKPT"; ensure_dir "$VAE"; ensure_dir "$LORAS"; ensure_dir "$CN"; ensure_dir "$IPA"; ensure_dir "$UPS"
+log "Cartelle modelli pronte."
+
+# ========== (OPZ) Download modelli ==========
+# Puoi personalizzare via env VARS prima di lanciare lo script.
+# Esempi (lasciati disattivati se non ti servono):
+
+# Juggernaut XL Inpainting (Civitai; la URL può cambiare)
+JXL_INP_URL="${JXL_INP_URL:-https://civitai.com/api/download/models/129549}"
+JXL_INP_DST="$CKPT/juggernaut_aftermath-inpainting.safetensors"
+if [[ -n "${JXL_INP_URL:-}" ]]; then
+  log "Download Juggernaut XL Inpainting…"
+  download "$JXL_INP_URL" "$JXL_INP_DST" || true
+  validate_safetensor "$JXL_INP_DST" || warn "Verifica JXL Inpainting fallita — valuta ri-download."
+fi
+
+# IP-Adapter SDXL encoder (se necessario)
+# IPA_URL="${IPA_URL:-https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/image_encoder/model.safetensors}"
+# [[ -n "${IPA_URL:-}" ]] && download "$IPA_URL" "$IPA/sdxl_image_encoder.safetensors"
+
+# Upscaler (esempio Real-ESRGAN x4)
+# UPS_URL="${UPS_URL:-https://huggingface.co/ai-forever/Real-ESRGAN/resolve/main/RealESRGAN_x4plus.pth}"
+# [[ -n "${UPS_URL:-}" ]] && download "$UPS_URL" "$UPS/RealESRGAN_x4plus.pth"
+
+log "Setup RunPod/ComfyUI completato."

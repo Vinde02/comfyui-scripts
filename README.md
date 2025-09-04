@@ -34,14 +34,15 @@ cd /workspace
 git clone https://github.com/Vinde02/comfyui-scripts.git
 cd comfyui-scripts
 ```
-▶️ Avvio script
+## ▶️ Avvio script
 Assicurati di avere la cartella ComfyUI dentro /workspace.
 
 ```
 chmod +x setup_runpod_comfyui.sh
 ./setup_runpod_comfyui.sh
 ```
-🔑 Hugging Face Token (Opzionale)
+
+## 🔑 Hugging Face Token (Opzionale)
 I modelli inclusi sono pubblici → non serve token.
 Se però vuoi installare modelli da repo privati o con licenza accettata, esporta il tuo HF_TOKEN:
 
@@ -49,6 +50,7 @@ Se però vuoi installare modelli da repo privati o con licenza accettata, esport
 export HF_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ./setup_runpod_comfyui.sh
 ```
+
 📌 Senza token, lo script funziona comunque per i modelli già inclusi.
 
 📋 Script rapidi
@@ -66,7 +68,8 @@ Aggiornare la repo
 cd /workspace/comfyui-scripts
 git pull
 ```
-✅ Modelli inclusi nello script
+
+## ✅ Modelli inclusi nello script
 Juggernaut XL Inpainting (Civitai)
 
 IP-Adapter SDXL image encoder (h94)
@@ -77,7 +80,7 @@ SDXL VAE (StabilityAI, URL corretto)
 
 Upscaler 4x-UltraSharp (lokCX, mirror stabile)
 
-📌 Note importanti
+## 📌 Note importanti
 Lo script lavora solo nella cartella ./ComfyUI → deve esistere già.
 
 Se un link da Civitai scade, sostituiscilo con un mirror Hugging Face.
@@ -86,11 +89,11 @@ Le dipendenze necessarie (git, git-lfs, aria2c, wget, curl, huggingface_hub, saf
 
 Warning di pip root user già soppressi con --root-user-action=ignore.
 
-🧪 Testato su
+## 🧪 Testato su
  RunPod GPU container (Ubuntu 22.04)
 
  Altri ambienti Linux (non ancora testati)
 
-📜 Licenza
+## 📜 Licenza
 Distribuito sotto licenza MIT.
 

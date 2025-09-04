@@ -36,31 +36,29 @@ cd comfyui-scripts
 ▶️ Avvio script
 Assicurati di avere la cartella ComfyUI dentro /workspace.
 
-bash
-Copia codice
+```bash
 chmod +x setup_runpod_comfyui.sh
 ./setup_runpod_comfyui.sh
 🔑 Hugging Face Token (Opzionale)
 I modelli inclusi sono pubblici → non serve token.
 Se però vuoi installare modelli da repo privati o con licenza accettata, esporta il tuo HF_TOKEN:
 
-bash
-Copia codice
+```bash
 export HF_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ./setup_runpod_comfyui.sh
 📌 Senza token, lo script funziona comunque per i modelli già inclusi.
 
 📋 Script rapidi
 Installazione completa (con token opzionale)
-bash
-Copia codice
+
+```bash
 cd /workspace/comfyui-scripts
 chmod +x setup_runpod_comfyui.sh
 export HF_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx   # ← opzionale
 ./setup_runpod_comfyui.sh
 Aggiornare la repo
-bash
-Copia codice
+
+```bash
 cd /workspace/comfyui-scripts
 git pull
 ✅ Modelli inclusi nello script
@@ -90,7 +88,4 @@ Warning di pip root user già soppressi con --root-user-action=ignore.
 
 📜 Licenza
 Distribuito sotto licenza MIT.
-
-yaml
-Copia codice
 

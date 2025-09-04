@@ -42,7 +42,10 @@ apri nano con
 ```
 nano start_setup.sh
 ```
-incolla il  seguente script e poi premi ctrl+o, poi invio e chiudi il nano con ctrl+x
+questo file serve a clonare/aggiornare la repo e lanciare lo script di installazione
+
+una volta aperto il nano in colla lo script di seguito e poi premi: "ctrl+o" --> "invio", e chiudi il nano con "ctrl+x"
+
 ```
 #!/usr/bin/env bash
 set -euo pipefail
@@ -73,10 +76,11 @@ echo "[INFO] Avvio installazione..."
 "./$REPO_DIR/$SCRIPT_NAME"
 
 ```
+
 poi usa il seguente comando
 
 ```
-chmod +x start_setup.sh
+chmod +x start_setup.sh && 
 ./start_setup.sh
 ```
 
